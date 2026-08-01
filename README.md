@@ -1,6 +1,6 @@
 <div align="center">
 
-# ustPlayerRender
+# uPlRender
 
 ustPlayer的视频渲染模块，可通过外部程序调用。
 
