@@ -1,0 +1,55 @@
+{
+  "ust": {
+    "version": "",
+    "tempo": 120.0,
+    "tracks": 1,
+    "notes": [
+      {
+        "index": "0000",
+        "length": 480,
+        "lyric": "A",
+        "note_num": 69,
+        "phoneme": "",
+        "pitch_bend": []
+      }
+    ]
+  },
+  "show": {
+    "bpm": true,
+    "play_time": true,
+    "song_name": true,
+    "song_author": true,
+    "ust_author": true,
+    "lyric": true,
+    "curve_show": false
+  },
+  "project": {
+    "project_name": "",
+    "song_name": "Test",
+    "song_author": "Author",
+    "ust_author": "Tuner"
+  },
+  "style": {
+    "fullscreen": false,
+    "bg_color": "#000000",
+    "note_color": "#6c6c6c",
+    "lyric_color": "#FFFFFF",
+    "lyric_text_color": "#FFFFFF",
+    "other_text_color": "#FFFFFF",
+    "pitch_curve_color": "#FFFFFF",
+    "silent_custom_text": "",
+    "end_custom_text": "",
+    "pitch_custom_text": "",
+    "lrc_path": "",
+    "music_path": "",
+    "app_version": "1.1.0 Beta 1",
+    "lyric_pos": "top",
+    "silent_display": "none",
+    "end_display": "none",
+    "pitch_placeholder": "none"
+  },
+  "width": 1920,
+  "height": 1080,
+  "fps": 60,
+  "output_path": "out.mp4"
+}

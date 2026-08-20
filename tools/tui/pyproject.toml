@@ -1,0 +1,17 @@
+[project]
+name = "ustplayer-renderer-tui"
+version = "0.1.0"
+description = "ustPlayer Renderer 配置 TUI(OpenCode 风格,Textual)"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "textual>=0.60.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

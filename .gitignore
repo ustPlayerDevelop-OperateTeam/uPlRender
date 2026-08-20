@@ -19,3 +19,34 @@ target
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
+
+# --- rust_renderer (moved to root) ---
+/target/
+**/*.rs.bk
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# 验证/示例产物
+/verify/
+/debug_output/
+*.ppm
+*.bmp
+*.png
+*.mp4
+*.exe
+
+# Python (tools/tui)
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+export_script.py
+export_output/
+.uv-cache/
+.pytest-tmp/
+
+pytest-cache-files-*/
