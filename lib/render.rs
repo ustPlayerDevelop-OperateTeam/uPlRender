@@ -16,7 +16,7 @@ pub struct DisplayState<'a> {
 pub fn render_frame(
     pixmap: &mut Pixmap,
     config: &RenderConfig,
-    fonts: &fonts::FontContext,
+    fonts: &mut fonts::FontContext,
     state: &DisplayState,
 ) -> Result<(), String> {
     let w = pixmap.width() as f32;
@@ -27,6 +27,20 @@ pub fn render_frame(
     let cx = w / 2.0;
     let cy = h / 2.0;
 
+    // 全分辨率兼容：以 1080p 为基准，所有字号与边距按高度等比缩放(比例因子 k)，
+    // 保证任意分辨率(从极小的预览到 4K/8K)下文字布局的比例一致、不破版。
+    // k=1 时各项恰好等于参考(QPainter @1080p)的值。
+    let k = h / 1080.0;
+    // 边距(单位像素)随 k 缩放,并设下限保证小分辨率下不与边缘贴死/溢出。
+    let margin = (20.0 * k).max(16.0);
+    // 行距(左上角三行)随 k 缩放。
+    let line_gap_song = 27.0 * k;
+    let line_gap_author = 25.0 * k;
+    // 音名 & 歌字(参考比例 2:1):歌字恒为音名的一半。
+    // 避免原先用独立下限(note.min=50 / lyric.min=80)时,小分辨率下歌字被钳得比音名还大。
+    let note_fs = (h * (2.0 / 3.0) * 0.4).max(50.0);
+    let lyric_fs = note_fs * 0.5;
+
     fill_rect(pixmap, 0.0, 0.0, w, h, &config.style.bg_color, 255)?;
 
     let note_name = state.note_name;
@@ -36,14 +50,6 @@ pub fn render_frame(
     // 规格:粗体,水平/垂直居中,文本四周留 th*0.2 内边距。
     // 对称内边距不改变文本中心位置(块居中后 padding 相互抵消),故仅需居中绘制。
     if !note_name.is_empty() {
-        let note_fs = (h * 2.0 / 3.0 * 0.4).max(50.0);
-        let first = note_name.chars().next().unwrap_or(' ');
-        let font = fonts.font_for_char(first, Weight::Bold);
-        let line = fonts
-            .line_metrics(font, note_fs)
-            .ok_or("note font metrics")?;
-        let tw = fonts.measure_text_width(note_name, note_fs, Weight::Bold);
-        let th = line.ascent - line.descent;
         let color = Color::from_rgba8(
             hex_r(&config.style.note_color),
             hex_g(&config.style.note_color),
@@ -58,9 +64,6 @@ pub fn render_frame(
             color,
             cx,
             cy,
-            tw,
-            th,
-            line.ascent,
             Weight::Bold,
         )?;
     }
@@ -71,7 +74,7 @@ pub fn render_frame(
             let pb = &note.pitch_bend;
             let note_len = note.length;
             if pb.len() >= 2 && note_len > 0 {
-                draw_pitch_curve(pixmap, config, fonts, pb, note_len, cx, cy, w, h)?;
+                draw_pitch_curve(pixmap, config, pb, note_len, cx, cy, w, h)?;
             }
         }
     }
@@ -79,14 +82,6 @@ pub fn render_frame(
     // 3. 歌字
     // 规格:粗体,居中绘制,四周留 th*0.2 内边距(对称内边距不影响居中)。
     if !lyric.is_empty() {
-        let lyric_fs = (h * 2.0 / 3.0 * 0.2).max(80.0);
-        let first = lyric.chars().next().unwrap_or(' ');
-        let font = fonts.font_for_char(first, Weight::Bold);
-        let line = fonts
-            .line_metrics(font, lyric_fs)
-            .ok_or("lyric font metrics")?;
-        let tw = fonts.measure_text_width(lyric, lyric_fs, Weight::Bold);
-        let th = line.ascent - line.descent;
         let color = Color::from_rgba8(
             hex_r(&config.style.lyric_color),
             hex_g(&config.style.lyric_color),
@@ -101,9 +96,6 @@ pub fn render_frame(
             color,
             cx,
             cy,
-            tw,
-            th,
-            line.ascent,
             Weight::Bold,
         )?;
     }
@@ -111,7 +103,9 @@ pub fn render_frame(
     // 4. 左上角静态信息
     // 规格:曲名(title_font 14px 粗体)起始基线 (20, 34),绘制后 y_off += 27;
     //      作者(small_font 14px 常规)后 y_off += 25;调音师最后。
-    let small_fs = 14.0;
+    // 全分辨率:小字随 k 等比缩放(下限保持可读),基线/边距用 margin。
+    // 参考 QFont(family,14) 是【点】字号≈19px(96dpi),故取 19px 基准,而非 14px。
+    let small_fs = (19.0 * k).max(14.0);
     {
         let color = Color::from_rgba8(
             hex_r(&config.style.other_text_color),
@@ -119,21 +113,21 @@ pub fn render_frame(
             hex_b(&config.style.other_text_color),
             255,
         );
-        let mut y_off = 20.0f32;
+        let mut y_off = margin;
 
         if config.show.song_name && !config.project.song_name.is_empty() {
-            let baseline_y = y_off + small_fs; // 20 + 14 = 34
+            let baseline_y = y_off + small_fs; // 1080p: 20 + 14 = 34
             draw_text_at_baseline(
                 pixmap,
                 &config.project.song_name,
                 fonts,
                 small_fs,
                 color,
-                20.0,
+                margin,
                 baseline_y,
                 Weight::Bold,
             )?;
-            y_off += 27.0;
+            y_off += line_gap_song;
         }
         if config.show.song_author && !config.project.song_author.is_empty() {
             let baseline_y = y_off + small_fs;
@@ -143,11 +137,11 @@ pub fn render_frame(
                 fonts,
                 small_fs,
                 color,
-                20.0,
+                margin,
                 baseline_y,
                 Weight::Regular,
             )?;
-            y_off += 25.0;
+            y_off += line_gap_author;
         }
         if config.show.ust_author && !config.project.ust_author.is_empty() {
             let baseline_y = y_off + small_fs;
@@ -157,7 +151,7 @@ pub fn render_frame(
                 fonts,
                 small_fs,
                 color,
-                20.0,
+                margin,
                 baseline_y,
                 Weight::Regular,
             )?;
@@ -167,11 +161,6 @@ pub fn render_frame(
     // 5. 右上角 BPM
     if config.show.bpm {
         let bpm_text = format!("BPM={}", config.ust.tempo);
-        let first = 'A';
-        let font = fonts.font_for_char(first, Weight::Regular);
-        let line = fonts
-            .line_metrics(font, small_fs)
-            .ok_or("bpm font metrics")?;
         let tw = fonts.measure_text_width(&bpm_text, small_fs, Weight::Regular);
         let color = Color::from_rgba8(
             hex_r(&config.style.other_text_color),
@@ -179,8 +168,9 @@ pub fn render_frame(
             hex_b(&config.style.other_text_color),
             255,
         );
-        let x = w - 20.0 - tw;
-        let baseline_y = 20.0 + line.ascent;
+        let x = w - margin - tw;
+        // 参考:painter.drawText(ww-20-bpm_w, 34, ...) —— 1080p 基线 = margin+small_fs = 34。
+        let baseline_y = margin + small_fs;
         draw_text_at_baseline(
             pixmap,
             &bpm_text,
@@ -196,20 +186,15 @@ pub fn render_frame(
     // 6. 左下角播放时间
     if config.show.play_time {
         let time_text = text::format_play_time(state.play_time);
-        let first = 'A';
-        let font = fonts.font_for_char(first, Weight::Regular);
-        let line = fonts
-            .line_metrics(font, small_fs)
-            .ok_or("time font metrics")?;
-        let _tw = fonts.measure_text_width(&time_text, small_fs, Weight::Regular);
         let color = Color::from_rgba8(
             hex_r(&config.style.other_text_color),
             hex_g(&config.style.other_text_color),
             hex_b(&config.style.other_text_color),
             255,
         );
-        let x = 20.0;
-        let baseline_y = h - 20.0 + line.ascent;
+        let x = margin;
+        // 参考:painter.drawText(20, wh-20, ...) —— 1080p 基线 = h-margin = h-20。
+        let baseline_y = h - margin;
         draw_text_at_baseline(
             pixmap,
             &time_text,
@@ -225,18 +210,14 @@ pub fn render_frame(
     // 7. LRC 歌词
     if config.show.lyric && !state.lrc_lyric.is_empty() {
         let lyric_fs = (h * 0.03).max(10.0);
-        let first = state.lrc_lyric.chars().next().unwrap_or(' ');
-        let font = fonts.font_for_char(first, Weight::Regular);
-        let line = fonts
-            .line_metrics(font, lyric_fs)
-            .ok_or("lrc font metrics")?;
         let tw = fonts.measure_text_width(state.lrc_lyric, lyric_fs, Weight::Regular);
         let lrc_top = if config.style.lyric_pos == "top" {
             h * 0.3
         } else {
             h * 0.7
         };
-        let baseline_y = lrc_top + line.ascent;
+        // 参考:painter.drawText(..., lrc_y, ...) —— 固定基线 lrc_y,非 top+ascent。
+        let baseline_y = lrc_top;
         let x = w / 2.0 - tw / 2.0;
         let color = Color::from_rgba8(
             hex_r(&config.style.lyric_text_color),
@@ -259,15 +240,11 @@ pub fn render_frame(
     // 8. 底部版权
     {
         let copy_text = format!("Presented with ustPlayer - {}", config.style.app_version);
-        let copy_fs = 12.0;
-        let first = 'A';
-        let font = fonts.font_for_char(first, Weight::Regular);
-        let line = fonts
-            .line_metrics(font, copy_fs)
-            .ok_or("copyright font metrics")?;
+        let copy_fs = (16.0 * k).max(12.0);
         let tw = fonts.measure_text_width(&copy_text, copy_fs, Weight::Regular);
         let x = w / 2.0 - tw / 2.0;
-        let baseline_y = h - 20.0 + line.ascent;
+        // 参考:painter.drawText(..., wh-20, ...) —— 1080p 基线 = h-margin = h-20。
+        let baseline_y = h - margin;
         let color = Color::from_rgba8(195, 195, 195, 100);
         draw_text_at_baseline(
             pixmap,
@@ -288,37 +265,34 @@ pub fn render_frame(
 fn draw_text_centered(
     pixmap: &mut Pixmap,
     text: &str,
-    fonts: &fonts::FontContext,
+    fonts: &mut fonts::FontContext,
     font_size: f32,
     color: Color,
     cx: f32,
     cy: f32,
-    tw: f32,
-    th: f32,
-    ascent: f32,
     weight: Weight,
 ) -> Result<(), String> {
-    let baseline_y = cy - th / 2.0 + ascent;
-    let mut cursor_x = cx - tw / 2.0;
-    for c in text.chars() {
-        let font = fonts.font_for_char(c, weight);
-        let (metrics, bitmap) = font.rasterize(c, font_size);
-        if metrics.width == 0 || metrics.height == 0 {
-            cursor_x += metrics.advance_width;
-            continue;
-        }
-        let glyph_x = cursor_x + metrics.xmin as f32;
-        let glyph_y = baseline_y + metrics.ymin as f32;
+    // 居中按"实际墨迹(ink)"包围盒:cosmic-text 返回每个字形相对(行首/基线)的墨迹位置,
+    // 求出整串墨迹包围盒,把其中心对齐到 (cx,cy)。这样音名/歌字、CJK/拉丁、有无下降部
+    // 都落到同一中心,不会因字体行高/度量差异而错位。
+    let shaped = fonts.shape(text, font_size, weight)?;
+    if shaped.glyphs.is_empty() {
+        return Ok(());
+    }
+    let ink_cx = (shaped.ink_left + shaped.ink_right) * 0.5;
+    let ink_cy = (shaped.ink_top + shaped.ink_bottom) * 0.5;
+    let origin_x = cx - ink_cx;
+    let origin_y = cy - ink_cy;
+    for g in &shaped.glyphs {
         blit_glyph(
             pixmap,
-            &bitmap,
-            metrics.width,
-            metrics.height,
-            glyph_x,
-            glyph_y,
+            &g.data,
+            g.w,
+            g.h,
+            origin_x + g.x,
+            origin_y + g.y,
             color,
         )?;
-        cursor_x += metrics.advance_width;
     }
     Ok(())
 }
@@ -327,32 +301,26 @@ fn draw_text_centered(
 fn draw_text_at_baseline(
     pixmap: &mut Pixmap,
     text: &str,
-    fonts: &fonts::FontContext,
+    fonts: &mut fonts::FontContext,
     font_size: f32,
     color: Color,
-    mut cursor_x: f32,
+    x: f32,
     baseline_y: f32,
     weight: Weight,
 ) -> Result<(), String> {
-    for c in text.chars() {
-        let font = fonts.font_for_char(c, weight);
-        let (metrics, bitmap) = font.rasterize(c, font_size);
-        if metrics.width == 0 || metrics.height == 0 {
-            cursor_x += metrics.advance_width;
-            continue;
-        }
-        let glyph_x = cursor_x + metrics.xmin as f32;
-        let glyph_y = baseline_y + metrics.ymin as f32;
+    // 基线定位:cosmic-text 给的字形位置已相对基线(y=0)与行首(x=0),
+    // 直接以 (x, baseline_y) 为原点贴上去即可;亚像素由 cosmic-text 定位,无逐字形抖动。
+    let shaped = fonts.shape(text, font_size, weight)?;
+    for g in &shaped.glyphs {
         blit_glyph(
             pixmap,
-            &bitmap,
-            metrics.width,
-            metrics.height,
-            glyph_x,
-            glyph_y,
+            &g.data,
+            g.w,
+            g.h,
+            x + g.x,
+            baseline_y + g.y,
             color,
         )?;
-        cursor_x += metrics.advance_width;
     }
     Ok(())
 }
@@ -361,7 +329,6 @@ fn draw_text_at_baseline(
 fn draw_pitch_curve(
     pixmap: &mut Pixmap,
     config: &RenderConfig,
-    _fonts: &fonts::FontContext,
     pb: &[i32],
     note_len: i32,
     cx: f32,
@@ -375,13 +342,17 @@ fn draw_pitch_curve(
     let curve_width = note_len as f32;
     let start_x = cx - curve_width / 2.0;
     let pb_count = pb.len();
+    // 全分辨率:安全区/下限/线宽随高度等比缩放(1080p 基准),避免小分辨率下曲线被固定
+    // 100px/50px 安全区过度压缩、或大分辨率下安全区占比过小。
+    let k = h / 1080.0;
+    let safe_top = 100.0 * k;
+    let safe_bottom = h - safe_top;
+    let clamp = (50.0 * k).max(1.0);
     let mut points = Vec::with_capacity(pb_count);
     for (i, &bend) in pb.iter().enumerate() {
         let x = start_x + (i as f32 / (pb_count - 1) as f32) * curve_width;
         let y_offset = (bend as f32 / 100.0) * (h * 0.09);
         let mut y = cy - y_offset;
-        let safe_top = 100.0;
-        let safe_bottom = h - 100.0;
         if y < safe_top {
             let exceed = safe_top - y;
             let scale = 0.3f32.max(1.0 - exceed / h * 2.0);
@@ -391,7 +362,7 @@ fn draw_pitch_curve(
             let scale = 0.3f32.max(1.0 - exceed / h * 2.0);
             y = safe_bottom + exceed * scale;
         }
-        y = y.clamp(50.0, h - 50.0);
+        y = y.clamp(clamp, h - clamp);
         points.push(Point { x, y });
     }
     if points.len() < 2 {
@@ -418,7 +389,7 @@ fn draw_pitch_curve(
     paint.anti_alias = true;
 
     let stroke = Stroke {
-        width: 5.0,
+        width: 5.0 * k,
         ..Default::default()
     };
 
@@ -595,5 +566,69 @@ mod tests {
         let px = pm.pixel(0, 0).unwrap();
         assert_eq!(px.red(), 0);
         assert_eq!(px.alpha(), 255); // 背景不透明黑
+    }
+
+    /// 回归:draw_text_centered 应按"实际墨迹(ink)"把中心对齐到 cy —— 这正是参考 QPainter
+    /// drawText(rect, AlignCenter) 按文本 boundingRect 居中的语义。
+    /// 这样音名("A4")与歌字("A"/"あ")不论字体/字号,墨迹中心都落在同一 cy → 二者重合。
+    #[test]
+    fn test_draw_text_centered_ink_centered_on_cy() {
+        // FontContext 依赖系统字体;无字体时跳过,避免在无字体环境误报。
+        let mut fonts = match crate::fonts::FontContext::new() {
+            Ok(f) => f,
+            Err(_) => return,
+        };
+
+        let w = 200u32;
+        let h = 120u32;
+        let cx = (w as f32) / 2.0;
+        let cy = (h as f32) / 2.0;
+        let mut pm = Pixmap::new(w, h).unwrap();
+        pm.fill(Color::BLACK);
+
+        draw_text_centered(&mut pm, "A4", &mut fonts, 40.0, Color::WHITE, cx, cy, Weight::Bold)
+            .unwrap();
+
+        // 统计非黑像素(RGB>0)的包围盒。
+        let mut min_x = i32::MAX;
+        let mut max_x = i32::MIN;
+        let mut min_y = i32::MAX;
+        let mut max_y = i32::MIN;
+        let mut any = false;
+        for y in 0..h {
+            for x in 0..w {
+                let p = pm.pixel(x, y).unwrap();
+                if p.red() > 0 || p.green() > 0 || p.blue() > 0 {
+                    any = true;
+                    let (xx, yy) = (x as i32, y as i32);
+                    if xx < min_x {
+                        min_x = xx;
+                    }
+                    if xx > max_x {
+                        max_x = xx;
+                    }
+                    if yy < min_y {
+                        min_y = yy;
+                    }
+                    if yy > max_y {
+                        max_y = yy;
+                    }
+                }
+            }
+        }
+        assert!(any, "centered text should produce ink");
+
+        let ink_cx = (min_x + max_x) as f32 / 2.0;
+        let ink_cy = (min_y + max_y) as f32 / 2.0;
+        // 水平居中(推进宽度箱中心在 cx)。侧轴空隙会导致墨迹略偏,故留较宽容差。
+        assert!(
+            (ink_cx - cx).abs() <= 12.0,
+            "ink horizontal center {ink_cx} should be ≈ cx {cx}"
+        );
+        // 垂直:墨迹中心应严格落在 cy(允许 2px 容差)。
+        assert!(
+            (ink_cy - cy).abs() <= 2.0,
+            "ink vertical center {ink_cy} should be ≈ cy {cy} (min_y={min_y}, max_y={max_y})"
+        );
     }
 }

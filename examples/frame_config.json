@@ -6,8 +6,8 @@
     "notes": [
       {
         "index": "0000",
-        "length": 480,
-        "lyric": "A",
+        "length": 960,
+        "lyric": "あ",
         "note_num": 69,
         "phoneme": "",
         "pitch_bend": []
@@ -21,13 +21,13 @@
     "song_author": true,
     "ust_author": true,
     "lyric": true,
-    "curve_show": false
+    "curve_show": true
   },
   "project": {
-    "project_name": "",
-    "song_name": "Test",
-    "song_author": "Author",
-    "ust_author": "Tuner"
+    "project_name": "TEST",
+    "song_name": "TEST - TEST",
+    "song_author": "UST BY HiRenG",
+    "ust_author": "TUNE BY HiRenG"
   },
   "style": {
     "fullscreen": false,
@@ -42,7 +42,7 @@
     "pitch_custom_text": "",
     "lrc_path": "",
     "music_path": "",
-    "app_version": "1.1.0 Beta 1",
+    "app_version": "1.1.0 Beta 2",
     "lyric_pos": "top",
     "silent_display": "none",
     "end_display": "none",

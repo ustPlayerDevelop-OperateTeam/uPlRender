@@ -308,20 +308,26 @@ fn do_render_frame(ctx: u64, elapsed_sec: f64) -> FfiResult {
 
     let (note_name, lyric, note_option, is_ended, lrc_lyric) =
         compute_display(&mut guard, elapsed_sec).map_err(|e| (UP_ERR_RENDER, e))?;
-    let config = guard
-        .config
+
+    // 解构成分离字段，避免 config(不可变)/fonts(可变)/encoder(可变)的借用冲突。
+    let ContextInner {
+        config,
+        fonts,
+        encoder,
+        ..
+    } = &mut *guard;
+    let config = config
         .as_ref()
         .ok_or((UP_ERR_RENDER, "config missing in render".into()))?;
-    let fonts = guard
-        .fonts
-        .as_ref()
+    let fonts = fonts
+        .as_mut()
         .ok_or((UP_ERR_RENDER, "fonts missing in render".into()))?;
 
-    // 先渲染到 pixmap(此时只借用 config/fonts 不可变),再取 encoder 可变借用推送。
+    // 先渲染到 pixmap(此时只借用 config 不可变、fonts 可变),再取 encoder 可变借用推送。
     // 提前提取 w/h 标量,让 `config` 的借用止于 render_frame,避免与 encoder 可变借用冲突。
     let cfg_w = config.width;
     let cfg_h = config.height;
-    let pixmap = if guard.encoder.is_some() {
+    let pixmap = if encoder.is_some() {
         let Some(mut pixmap) = tiny_skia::Pixmap::new(cfg_w, cfg_h) else {
             return Err((UP_ERR_RENDER, "failed to allocate pixmap".into()));
         };
@@ -344,7 +350,7 @@ fn do_render_frame(ctx: u64, elapsed_sec: f64) -> FfiResult {
         None
     };
 
-    if let (Some(pixmap), Some(ref mut enc)) = (pixmap, guard.encoder.as_mut()) {
+    if let (Some(pixmap), Some(ref mut enc)) = (pixmap, encoder.as_mut()) {
         let data = pixmap.data();
         enc.push_frame(data, cfg_w, cfg_h)
             .map_err(|e| (UP_ERR_RENDER, format!("encode push failed: {}", e)))?;
@@ -491,13 +497,17 @@ fn do_render_to_buffer(ctx: u64, elapsed_sec: f64, buf: *mut c_uchar, buf_len: i
     let (note_name, lyric, note_option, is_ended, lrc_lyric) =
         compute_display(&mut guard, elapsed_sec).map_err(|e| (UP_ERR_RENDER, e))?;
 
-    let config = guard
-        .config
+    // 解构成分离字段，避免 config(不可变)/fonts(可变)的借用冲突。
+    let ContextInner {
+        config,
+        fonts,
+        ..
+    } = &mut *guard;
+    let config = config
         .as_ref()
         .ok_or((UP_ERR_RENDER, "config missing".into()))?;
-    let fonts = guard
-        .fonts
-        .as_ref()
+    let fonts = fonts
+        .as_mut()
         .ok_or((UP_ERR_RENDER, "fonts missing".into()))?;
 
     let Some(mut pixmap) = tiny_skia::Pixmap::new(config.width, config.height) else {
