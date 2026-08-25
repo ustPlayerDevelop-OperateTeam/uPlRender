@@ -1,0 +1,37 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+# 需要写 release(附件)与内容
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & Publish (windows-msvc)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust (stable, msvc)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build (release)
+        run: cargo build --release
+
+      - name: Test
+        run: cargo test
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            target/release/ustplayer_renderer.dll
+            target/release/ustplayer_renderer.dll.lib
+          name: ${{ github.ref_name }}
+          generate_release_notes: true

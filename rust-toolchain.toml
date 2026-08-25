@@ -1,0 +1,5 @@
+[toolchain]
+channel = "stable"
+# 只装编译+链接所需组件，加快 CI；clippy/fmt 在 workflow 里按需安装
+profile = "minimal"
+targets = ["x86_64-pc-windows-msvc"]

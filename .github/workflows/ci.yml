@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main]
+
+# 任务级仅读权限；上传产物不需要额外写入
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-test:
+    name: Build & Test (windows-msvc)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust (stable, msvc)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build (release)
+        run: cargo build --release
+
+      - name: Test
+        run: cargo test
+
+      - name: Clippy
+        run: cargo clippy --all-targets
+
+      - name: Upload DLL artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ustplayer_renderer-windows
+          path: |
+            target/release/ustplayer_renderer.dll
+            target/release/ustplayer_renderer.dll.lib
+          if-no-files-found: warn
