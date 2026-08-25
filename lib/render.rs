@@ -183,8 +183,8 @@ pub fn render_frame(
         )?;
     }
 
-    // 6. 左下角播放时间
-    if config.show.play_time {
+    // 6. 左下角播放时间（显示结束文字时隐藏秒表）
+    if config.show.play_time && !state.is_ended {
         let time_text = text::format_play_time(state.play_time);
         let color = Color::from_rgba8(
             hex_r(&config.style.other_text_color),
