@@ -50,3 +50,9 @@ export_output/
 .pytest-tmp/
 
 pytest-cache-files-*/
+
+# C++ 调试器构建产物(MSVC 中间文件)
+*.obj
+
+# 运行日志
+*.log
