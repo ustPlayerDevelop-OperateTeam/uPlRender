@@ -31,14 +31,13 @@ pub fn render_frame(
     // 保证任意分辨率(从极小的预览到 4K/8K)下文字布局的比例一致、不破版。
     // k=1 时各项恰好等于参考(QPainter @1080p)的值。
     let k = h / 1080.0;
-    // 边距(单位像素)随 k 缩放,并设下限保证小分辨率下不与边缘贴死/溢出。
-    let margin = (20.0 * k).max(16.0);
+    // 边距随 k 等比缩放(无硬下限,始终保持比例一致)。
+    let margin = (20.0 * k).max(1.0);
     // 行距(左上角三行)随 k 缩放。
     let line_gap_song = 27.0 * k;
     let line_gap_author = 25.0 * k;
-    // 音名 & 歌字(参考比例 2:1):歌字恒为音名的一半。
-    // 避免原先用独立下限(note.min=50 / lyric.min=80)时,小分辨率下歌字被钳得比音名还大。
-    let note_fs = (h * (2.0 / 3.0) * 0.4).max(50.0);
+    // 音名 & 歌字(参考比例 2:1):歌字恒为音名的一半,随 h 等比缩放。
+    let note_fs = (h * (2.0 / 3.0) * 0.4).max(1.0);
     let lyric_fs = note_fs * 0.5;
 
     fill_rect(pixmap, 0.0, 0.0, w, h, &config.style.bg_color, 255)?;
@@ -103,9 +102,8 @@ pub fn render_frame(
     // 4. 左上角静态信息
     // 规格:曲名(title_font 14px 粗体)起始基线 (20, 34),绘制后 y_off += 27;
     //      作者(small_font 14px 常规)后 y_off += 25;调音师最后。
-    // 全分辨率:小字随 k 等比缩放(下限保持可读),基线/边距用 margin。
-    // 参考 QFont(family,14) 是【点】字号≈19px(96dpi),故取 19px 基准,而非 14px。
-    let small_fs = (19.0 * k).max(14.0);
+    // 全分辨率:小字随 k 等比缩放(无硬下限,严格按比例)。参考 QFont(family,14)是【点】字号≈19px(96dpi)。
+    let small_fs = (19.0 * k).max(1.0);
     {
         let color = Color::from_rgba8(
             hex_r(&config.style.other_text_color),
@@ -209,7 +207,7 @@ pub fn render_frame(
 
     // 7. LRC 歌词
     if config.show.lyric && !state.lrc_lyric.is_empty() {
-        let lyric_fs = (h * 0.03).max(10.0);
+        let lyric_fs = (h * 0.03).max(1.0);
         let tw = fonts.measure_text_width(state.lrc_lyric, lyric_fs, Weight::Regular);
         let lrc_top = if config.style.lyric_pos == "top" {
             h * 0.3
@@ -240,7 +238,7 @@ pub fn render_frame(
     // 8. 底部版权
     {
         let copy_text = format!("Presented with ustPlayer - {}", config.style.app_version);
-        let copy_fs = (16.0 * k).max(12.0);
+        let copy_fs = (16.0 * k).max(1.0);
         let tw = fonts.measure_text_width(&copy_text, copy_fs, Weight::Regular);
         let x = w / 2.0 - tw / 2.0;
         // 参考:painter.drawText(..., wh-20, ...) —— 1080p 基线 = h-margin = h-20。
