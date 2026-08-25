@@ -46,6 +46,11 @@ impl FontContext {
     pub fn new() -> Result<Self, String> {
         let mut font_system = FontSystem::new();
         font_system.db_mut().load_system_fonts();
+        // cosmic-text 的默认回退族(Fira Mono/Fira Sans/DejaVu Serif)在 Windows 上不存在；
+        // 把它指向 Windows 常见字体，确保"等线 DengXian 缺失"的环境(如 CI)也能回退渲染。
+        font_system.db_mut().set_sans_serif_family("Segoe UI");
+        font_system.db_mut().set_serif_family("Cambria");
+        font_system.db_mut().set_monospace_family("Consolas");
         Ok(Self {
             font_system,
             cache: SwashCache::new(),
